@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Language Translator</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>🌍 Language Translation Tool</h1>
+
+    <form method="POST">
+
+        <textarea
+            name="text"
+            placeholder="Enter text here..."
+            required>{{ text }}</textarea>
+
+        <div class="dropdowns">
+
+            <select name="source">
+                <option value="auto" {% if source_lang == 'auto' %}selected{% endif %}>Detect Language</option>
+                <option value="en" {% if source_lang == 'en' %}selected{% endif %}>English</option>
+                <option value="hi" {% if source_lang == 'hi' %}selected{% endif %}>Hindi</option>
+                <option value="fr" {% if source_lang == 'fr' %}selected{% endif %}>French</option>
+                <option value="es" {% if source_lang == 'es' %}selected{% endif %}>Spanish</option>
+            </select>
+
+            <select name="target">
+                <option value="hi" {% if target_lang == 'hi' %}selected{% endif %}>Hindi</option>
+                <option value="en" {% if target_lang == 'en' %}selected{% endif %}>English</option>
+                <option value="fr" {% if target_lang == 'fr' %}selected{% endif %}>French</option>
+                <option value="es" {% if target_lang == 'es' %}selected{% endif %}>Spanish</option>
+            </select>
+
+        </div>
+
+        <button type="submit">Translate</button>
+
+    </form>
+
+    {% if translated_text or error_message %}
+
+    <div class="result">
+
+        {% if error_message %}
+            <h3 style="color: red;">{{ error_message }}</h3>
+        {% else %}
+            <h3>Translated Text:</h3>
+            <p id="translatedText" data-target-lang="{{ target_lang }}">{{ translated_text }}</p>
+            <div class="buttons">
+                <button type="button" onclick="copyText()">
+                    📋 Copy
+                </button>
+                <button type="button" onclick="speakText()">
+                    🔊 Speak
+                </button>
+            </div>
+        {% endif %}
+
+    </div>
+
+    {% endif %}
+
+</div>
+
+<script>
+
+function copyText() {
+    const text = document.getElementById("translatedText").innerText;
+    
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+            alert("Copied to clipboard!");
+        }).catch(() => {
+            // Fallback for older browsers
+            const textarea = document.createElement("textarea");
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand("copy");
+            document.body.removeChild(textarea);
+            alert("Copied to clipboard!");
+        });
+    } else {
+        // Fallback for unsupported browsers
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+        alert("Copied to clipboard!");
+    }
+}
+
+function getSpeechLanguage(code) {
+    const map = {
+        hi: "hi-IN",
+        en: "en-US",
+        fr: "fr-FR",
+        es: "es-ES"
+    };
+    return map[code] || "en-US";
+}
+
+function findBestVoice(lang) {
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices || !voices.length) return null;
+
+    const normalized = lang.toLowerCase();
+    let voice = voices.find(v => v.lang.toLowerCase().startsWith(normalized));
+    if (!voice) {
+        voice = voices.find(v => v.lang.toLowerCase().includes(normalized));
+    }
+    return voice || voices[0];
+}
+
+function speakText() {
+    if (!("speechSynthesis" in window)) {
+        alert("Speech synthesis not supported in your browser");
+        return;
+    }
+
+    let textElement = document.getElementById("translatedText");
+    let text = textElement.innerText.trim();
+    let targetLang = textElement.dataset.targetLang || "en";
+    let speechLang = getSpeechLanguage(targetLang);
+
+    if (!text) {
+        alert("No translated text available to speak.");
+        return;
+    }
+
+    function speakNow() {
+        window.speechSynthesis.cancel();
+
+        let speech = new SpeechSynthesisUtterance(text);
+        speech.lang = speechLang;
+        speech.rate = 1;
+        speech.pitch = 1;
+        speech.volume = 1;
+
+        const voice = findBestVoice(speechLang);
+        if (voice) {
+            speech.voice = voice;
+        }
+
+        window.speechSynthesis.speak(speech);
+    }
+
+    // Browsers (especially Chrome) load voices asynchronously.
+    // Poll until voices are available, then speak.
+    function waitForVoicesAndSpeak(attemptsLeft) {
+        const voices = window.speechSynthesis.getVoices();
+        if (voices && voices.length > 0) {
+            speakNow();
+        } else if (attemptsLeft > 0) {
+            setTimeout(() => waitForVoicesAndSpeak(attemptsLeft - 1), 100);
+        } else {
+            // No voices found after retries — speak anyway (browser may still handle it)
+            speakNow();
+        }
+    }
+
+    // Also attach onvoiceschanged in case it fires before our poll completes
+    window.speechSynthesis.onvoiceschanged = function() {
+        window.speechSynthesis.onvoiceschanged = null;
+        speakNow();
+    };
+
+    waitForVoicesAndSpeak(10);
+}
+
+</script>
+
+</body>
+</html>
